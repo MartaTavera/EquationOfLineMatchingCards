@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linear Equation Memory Game</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const LinearEquationMemoryGame = () => {
+          // Define 6 equation-graph pairs
+          const equations = [
+            { id: 1, equation: 'y = 2x + 1', slope: 2, intercept: 1 },
+            { id: 2, equation: 'y = -x + 3', slope: -1, intercept: 3 },
+            { id: 3, equation: 'y = 0.5x - 2', slope: 0.5, intercept: -2 },
+            { id: 4, equation: 'y = -2x + 4', slope: -2, intercept: 4 },
+            { id: 5, equation: 'y = x + 1', slope: 1, intercept: 1 },
+            { id: 6, equation: 'y = 3', slope: 0, intercept: 3 }
+          ];
+
+          // Create SVG graph component
+          const GraphTile = ({ slope, intercept, size = 120 }) => {
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const scale = 15; // pixels per unit
+            
+            // For drawing the line, use the full range of the visible area
+            const minX = -4; // leftmost x value visible
+            const maxX = 4;  // rightmost x value visible
+            
+            // Calculate y values at the edges
+            const y1 = slope * minX + intercept;
+            const y2 = slope * maxX + intercept;
+            
+            // Convert to SVG coordinates (remember: SVG y increases downward)
+            const svgX1 = centerX + minX * scale;
+            const svgY1 = centerY - y1 * scale;
+            const svgX2 = centerX + maxX * scale;
+            const svgY2 = centerY - y2 * scale;
+
+            return React.createElement('svg', {
+              width: size,
+              height: size,
+              className: "border border-gray-300"
+            }, [
+              // Grid pattern definition
+              React.createElement('defs', { key: 'defs' }, 
+                React.createElement('pattern', {
+                  id: `grid-${slope}-${intercept}`,
+                  width: "15",
+                  height: "15",
+                  patternUnits: "userSpaceOnUse"
+                }, React.createElement('path', {
+                  d: "M 15 0 L 0 0 0 15",
+                  fill: "none",
+                  stroke: "#e5e7eb",
+                  strokeWidth: "1"
+                }))
+              ),
+              // Grid background
+              React.createElement('rect', {
+                key: 'grid-bg',
+                width: "100%",
+                height: "100%",
+                fill: `url(#grid-${slope}-${intercept})`
+              }),
+              // Y-axis
+              React.createElement('line', {
+                key: 'y-axis',
+                x1: centerX,
+                y1: 0,
+                x2: centerX,
+                y2: size,
+                stroke: "#9ca3af",
+                strokeWidth: "2"
+              }),
+              // X-axis
+              React.createElement('line', {
+                key: 'x-axis',
+                x1: 0,
+                y1: centerY,
+                x2: size,
+                y2: centerY,
+                stroke: "#9ca3af",
+                strokeWidth: "2"
+              }),
+              // X-axis numbers
+              ...[-3, -2, -1, 1, 2, 3].map(num => 
+                React.createElement('text', {
+                  key: `x${num}-${slope}-${intercept}`,
+                  x: centerX + num * scale,
+                  y: centerY + 12,
+                  textAnchor: "middle",
+                  fontSize: "8",
+                  fill: "#6b7280"
+                }, num)
+              ),
+              // Y-axis numbers
+              ...[-3, -2, -1, 1, 2, 3, 4].map(num => 
+                React.createElement('text', {
+                  key: `y${num}-${slope}-${intercept}`,
+                  x: centerX - 8,
+                  y: centerY - num * scale + 3,
+                  textAnchor: "middle",
+                  fontSize: "8",
+                  fill: "#6b7280"
+                }, num)
+              ),
+              // Line
+              React.createElement('line', {
+                key: 'main-line',
+                x1: svgX1,
+                y1: svgY1,
+                x2: svgX2,
+                y2: svgY2,
+                stroke: "#3b82f6",
+                strokeWidth: "3",
+                strokeLinecap: "round"
+              }),
+              // Y-intercept point
+              ...(intercept >= -4 && intercept <= 4 ? [
+                React.createElement('circle', {
+                  key: 'y-intercept',
+                  cx: centerX,
+                  cy: centerY - intercept * scale,
+                  r: "3",
+                  fill: "#ef4444",
+                  stroke: "#fff",
+                  strokeWidth: "1"
+                })
+              ] : []),
+              // Tick marks
+              ...[-3, -2, -1, 1, 2, 3].flatMap(num => [
+                // X-axis ticks
+                React.createElement('line', {
+                  key: `x-tick-${num}-${slope}-${intercept}`,
+                  x1: centerX + num * scale,
+                  y1: centerY - 3,
+                  x2: centerX + num * scale,
+                  y2: centerY + 3,
+                  stroke: "#9ca3af",
+                  strokeWidth: "1"
+                }),
+                // Y-axis ticks
+                React.createElement('line', {
+                  key: `y-tick-${num}-${slope}-${intercept}`,
+                  x1: centerX - 3,
+                  y1: centerY - num * scale,
+                  x2: centerX + 3,
+                  y2: centerY - num * scale,
+                  stroke: "#9ca3af",
+                  strokeWidth: "1"
+                })
+              ])
+            ]);
+          };
+
+          // Create tiles array with equations and graphs
+          const createTiles = () => {
+            const tiles = [];
+            equations.forEach(eq => {
+              tiles.push({ 
+                id: eq.id * 2 - 1, 
+                type: 'equation', 
+                content: eq.equation, 
+                matchId: eq.id 
+              });
+              tiles.push({ 
+                id: eq.id * 2, 
+                type: 'graph', 
+                slope: eq.slope, 
+                intercept: eq.intercept, 
+                matchId: eq.id 
+              });
+            });
+            return tiles.sort(() => Math.random() - 0.5);
+          };
+
+          const [tiles, setTiles] = useState(createTiles());
+          const [flippedTiles, setFlippedTiles] = useState([]);
+          const [matchedTiles, setMatchedTiles] = useState([]);
+          const [selectedTiles, setSelectedTiles] = useState([]);
+          const [showConfirm, setShowConfirm] = useState(false);
+          const [score, setScore] = useState(0);
+          const [attempts, setAttempts] = useState(0);
+
+          const handleTileClick = (tileId) => {
+            if (selectedTiles.length >= 2 || matchedTiles.includes(tileId) || selectedTiles.includes(tileId)) {
+              return;
+            }
+            
+            const clickedTile = tiles.find(t => t.id === tileId);
+            
+            // If we already have one tile selected, check if we're selecting the same type
+            if (selectedTiles.length === 1) {
+              const firstTile = tiles.find(t => t.id === selectedTiles[0]);
+              if (firstTile.type === clickedTile.type) {
+                // Same type selected, replace the first selection
+                setSelectedTiles([tileId]);
+                setFlippedTiles([...flippedTiles.filter(id => id !== selectedTiles[0]), tileId]);
+                return;
+              }
+            }
+            
+            const newSelected = [...selectedTiles, tileId];
+            setSelectedTiles(newSelected);
+            setFlippedTiles([...flippedTiles, tileId]);
+            
+            if (newSelected.length === 2) {
+              setShowConfirm(true);
+            }
+          };
+
+          const handleConfirm = (isMatch) => {
+            setAttempts(attempts + 1);
+            
+            if (isMatch) {
+              const tile1 = tiles.find(t => t.id === selectedTiles[0]);
+              const tile2 = tiles.find(t => t.id === selectedTiles[1]);
+              
+              if (tile1.matchId === tile2.matchId) {
+                setMatchedTiles([...matchedTiles, ...selectedTiles]);
+                setScore(score + 1);
+              } else {
+                // Wrong match - flip back after delay
+                setTimeout(() => {
+                  setFlippedTiles(flippedTiles.filter(id => !selectedTiles.includes(id)));
+                }, 1000);
+              }
+            } else {
+              // User says no match - flip back
+              setTimeout(() => {
+                setFlippedTiles(flippedTiles.filter(id => !selectedTiles.includes(id)));
+              }, 500);
+            }
+            
+            setSelectedTiles([]);
+            setShowConfirm(false);
+          };
+
+          const resetGame = () => {
+            setTiles(createTiles());
+            setFlippedTiles([]);
+            setMatchedTiles([]);
+            setSelectedTiles([]);
+            setShowConfirm(false);
+            setScore(0);
+            setAttempts(0);
+          };
+
+          const isGameComplete = matchedTiles.length === 12;
+
+          return React.createElement('div', {
+            className: "max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen"
+          }, [
+            // Header
+            React.createElement('div', {
+              key: 'header',
+              className: "text-center mb-6"
+            }, [
+              React.createElement('h1', {
+                key: 'title',
+                className: "text-3xl font-bold text-gray-800 mb-2"
+              }, "Linear Equation Memory Game"),
+              React.createElement('p', {
+                key: 'description',
+                className: "text-gray-600 mb-4"
+              }, "Match equations with their corresponding graphs! Blue tiles contain equations (E), gray tiles contain graphs (G)."),
+              React.createElement('div', {
+                key: 'scores',
+                className: "flex justify-center gap-6 text-lg"
+              }, [
+                React.createElement('span', {
+                  key: 'matches',
+                  className: "bg-blue-100 px-4 py-2 rounded-lg"
+                }, `Matches: ${score}/6`),
+                React.createElement('span', {
+                  key: 'attempts',
+                  className: "bg-green-100 px-4 py-2 rounded-lg"
+                }, `Attempts: ${attempts}`)
+              ])
+            ]),
+            // Game grid
+            React.createElement('div', {
+              key: 'grid',
+              className: "grid grid-cols-4 gap-4 mb-6"
+            }, tiles.map(tile => {
+              const isFlipped = flippedTiles.includes(tile.id) || matchedTiles.includes(tile.id);
+              const isSelected = selectedTiles.includes(tile.id);
+              const isMatched = matchedTiles.includes(tile.id);
+              
+              return React.createElement('div', {
+                key: tile.id,
+                onClick: () => handleTileClick(tile.id),
+                className: `w-32 h-32 border-2 rounded-lg cursor-pointer transition-all duration-300 flex items-center justify-center ${
+                  isMatched ? 'bg-green-100 border-green-400' : 
+                  isSelected ? (tile.type === 'equation' ? 'bg-blue-200 border-blue-500' : 'bg-gray-300 border-gray-500') : 
+                  isFlipped ? 'bg-white border-gray-300' : 
+                  tile.type === 'equation' ? 'bg-blue-400 border-blue-500 hover:bg-blue-500' : 'bg-gray-400 border-gray-500 hover:bg-gray-500'
+                }`
+              }, isFlipped ? (
+                tile.type === 'equation' ? 
+                  React.createElement('div', {
+                    className: "text-center"
+                  }, React.createElement('div', {
+                    className: "text-lg font-mono font-semibold text-gray-800"
+                  }, tile.content)) :
+                  React.createElement(GraphTile, {
+                    slope: tile.slope,
+                    intercept: tile.intercept,
+                    size: 120
+                  })
+              ) : (
+                React.createElement('div', {
+                  className: "text-4xl font-bold"
+                }, tile.type === 'equation' ? 
+                  React.createElement('span', { className: "text-white" }, "E") :
+                  React.createElement('span', { className: "text-white" }, "G")
+                )
+              ));
+            })),
+            // Confirmation modal
+            ...(showConfirm ? [
+              React.createElement('div', {
+                key: 'modal-backdrop',
+                className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+              }, React.createElement('div', {
+                className: "bg-white p-6 rounded-lg shadow-xl"
+              }, [
+                React.createElement('h3', {
+                  key: 'modal-title',
+                  className: "text-xl font-semibold mb-4"
+                }, "Do these match?"),
+                React.createElement('div', {
+                  key: 'modal-tiles',
+                  className: "flex gap-4 mb-6"
+                }, selectedTiles.map(tileId => {
+                  const tile = tiles.find(t => t.id === tileId);
+                  return React.createElement('div', {
+                    key: tileId,
+                    className: "flex flex-col items-center"
+                  }, [
+                    React.createElement('div', {
+                      key: 'tile-display',
+                      className: "w-32 h-32 border-2 border-gray-300 rounded-lg flex items-center justify-center bg-white mb-2"
+                    }, tile.type === 'equation' ? 
+                      React.createElement('div', {
+                        className: "text-lg font-mono font-semibold text-gray-800"
+                      }, tile.content) :
+                      React.createElement(GraphTile, {
+                        slope: tile.slope,
+                        intercept: tile.intercept,
+                        size: 120
+                      })
+                    ),
+                    React.createElement('span', {
+                      key: 'tile-label',
+                      className: "text-sm text-gray-600"
+                    }, tile.type === 'equation' ? 'Equation' : 'Graph')
+                  ]);
+                })),
+                React.createElement('div', {
+                  key: 'modal-buttons',
+                  className: "flex gap-4 justify-center"
+                }, [
+                  React.createElement('button', {
+                    key: 'yes-button',
+                    onClick: () => handleConfirm(true),
+                    className: "px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  }, "Yes, they match!"),
+                  React.createElement('button', {
+                    key: 'no-button',
+                    onClick: () => handleConfirm(false),
+                    className: "px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                  }, "No, they don't match")
+                ])
+              ]))
+            ] : []),
+            // Completion modal
+            ...(isGameComplete ? [
+              React.createElement('div', {
+                key: 'completion-backdrop',
+                className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+              }, React.createElement('div', {
+                className: "bg-white p-8 rounded-lg shadow-xl text-center"
+              }, [
+                React.createElement('h2', {
+                  key: 'completion-title',
+                  className: "text-3xl font-bold text-green-600 mb-4"
+                }, "Congratulations! 🎉"),
+                React.createElement('p', {
+                  key: 'completion-text',
+                  className: "text-lg text-gray-700 mb-4"
+                }, `You completed the game in ${attempts} attempts!`),
+                React.createElement('button', {
+                  key: 'play-again-button',
+                  onClick: resetGame,
+                  className: "px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-lg"
+                }, "Play Again")
+              ]))
+            ] : []),
+            // Reset button
+            React.createElement('div', {
+              key: 'reset-container',
+              className: "text-center"
+            }, React.createElement('button', {
+              onClick: resetGame,
+              className: "px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            }, "Reset Game"))
+          ]);
+        };
+
+        // Render the app
+        ReactDOM.render(React.createElement(LinearEquationMemoryGame), document.getElementById('root'));
+    </script>
+</body>
+</html>
